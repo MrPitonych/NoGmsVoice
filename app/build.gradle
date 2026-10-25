@@ -1,0 +1,110 @@
+plugins {
+    id 'com.android.application'
+}
+
+// Release signing comes from keystore.properties in the repository root (ignored by git; see
+// keystore.properties.example). Without it the release build is signed with the debug key: good enough to
+// try on a TV, but such an APK cannot update a release-signed install and must never be attached to a release.
+def keystoreProperties = new Properties()
+def keystorePropertiesFile = rootProject.file('keystore.properties')
+if (keystorePropertiesFile.isFile()) {
+    keystorePropertiesFile.withInputStream { keystoreProperties.load(it) }
+}
+def releaseSigned = keystoreProperties.containsKey('storeFile')
+if (!releaseSigned) logger.warn('No keystore.properties: release APKs will be signed with the debug key')
+
+android {
+    namespace = 'io.github.mrpitonych.nogmsvoice'
+    compileSdk = 34
+
+    defaultConfig {
+        applicationId = 'io.github.mrpitonych.nogmsvoice'
+        minSdk = 26
+        targetSdk = 34
+        versionCode = 1
+        versionName = '1.0.0'
+        // 32-bit ARM runs on most ARM TVs and boxes, 64-bit ones included (the first target, a Xiaomi S55,
+        // is 32-bit only); 64-bit-only Android builds are rare outside phones. The other ABIs would add
+        // about 10 MB to the APK.
+        ndk { abiFilters 'armeabi-v7a' }
+    }
+
+    // One build per language, each with its own model in the assets. Same applicationId on purpose: a TV
+    // runs one of them, and installing the other language's build replaces it. A new flavour also needs
+    // its assets line below, service_label in app/src/<flavour>/res/values and values-ru, and its lint
+    // task in .github/workflows/build.yml.
+    flavorDimensions = ['language']
+    productFlavors {
+        ru { dimension = 'language'; versionNameSuffix = '-ru' }
+        en { dimension = 'language'; versionNameSuffix = '-en' }
+    }
+
+    // fetch-model.sh <lang> unpacks the model into ../model/<lang>/assets/model.
+    sourceSets {
+        ru.assets.srcDirs = ['../model/ru/assets']
+        en.assets.srcDirs = ['../model/en/assets']
+    }
+
+    signingConfigs {
+        release {
+            if (releaseSigned) {
+                storeFile = rootProject.file(keystoreProperties['storeFile'])
+                storePassword = keystoreProperties['storePassword']
+                keyAlias = keystoreProperties['keyAlias']
+                keyPassword = keystoreProperties['keyPassword']
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            // JNA finds Vosk's classes by reflection, so R8 would break them.
+            minifyEnabled = false
+            signingConfig = releaseSigned ? signingConfigs.release : signingConfigs.debug
+        }
+    }
+
+    packaging {
+        // JNA opens libvosk.so from disk, so the libraries have to be extracted at install.
+        jniLibs { useLegacyPackaging = true }
+    }
+
+    // No Google-encrypted dependency block in the APK: nothing outside Play reads it.
+    dependenciesInfo {
+        includeInApk = false
+        includeInBundle = false
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    lint {
+        warningsAsErrors = true
+    }
+
+    applicationVariants.all { variant ->
+        // An APK without its model would install and then fail on the first request, so refuse to build one.
+        def lang = variant.flavorName
+        def modelFile = rootProject.file("model/${lang}/assets/model/am/final.mdl")
+        variant.preBuildProvider.configure { task ->
+            task.doFirst {
+                if (!modelFile.isFile()) {
+                    throw new GradleException("The Vosk model for '${lang}' is missing: run ./fetch-model.sh ${lang} first")
+                }
+            }
+        }
+        // NoGmsVoice-1.0.0-ru.apk, the name a release carries: versionName already ends in -ru/-en, and a
+        // debug build gets -debug on top.
+        variant.outputs.all { output ->
+            def type = variant.buildType.name == 'release' ? '' : "-${variant.buildType.name}"
+            output.outputFileName = "NoGmsVoice-${variant.versionName}${type}.apk"
+        }
+    }
+}
+
+dependencies {
+    implementation 'com.alphacephei:vosk-android:0.3.75@aar'
+    implementation 'net.java.dev.jna:jna:5.18.1@aar'
+}

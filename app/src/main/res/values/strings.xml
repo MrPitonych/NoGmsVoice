@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name" translatable="false">NoGmsVoice</string>
+    <!-- service_label, shown in the system's voice-input settings, comes from the language flavour: src/ru, src/en. -->
+</resources>

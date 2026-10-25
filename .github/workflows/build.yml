@@ -1,0 +1,56 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: 'platforms;android-34 build-tools;34.0.0'
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      - uses: actions/cache@v6
+        with:
+          path: model/*.zip
+          key: vosk-models-${{ hashFiles('fetch-model.sh') }}
+
+      - name: Fetch the Vosk models
+        run: ./fetch-model.sh all
+
+      - name: Lint and build both languages
+        run: ./gradlew --no-daemon lintRuRelease lintEnRelease assembleRelease
+
+      - name: Check that only the microphone and package visibility are requested
+        run: |
+          for apk in app/build/outputs/apk/*/release/NoGmsVoice-*.apk; do
+            extra=$("$ANDROID_HOME/build-tools/34.0.0/aapt2" dump permissions "$apk" \
+              | grep uses-permission | grep -v -e RECORD_AUDIO -e QUERY_ALL_PACKAGES || true)
+            if [ -n "$extra" ]; then echo "$apk asks for more: $extra"; exit 1; fi
+          done
+
+      # Signed with the debug key: CI has no release keystore. Never attach these to a release.
+      - uses: actions/upload-artifact@v7
+        with:
+          name: NoGmsVoice-debug-signed
+          path: app/build/outputs/apk/*/release/NoGmsVoice-*.apk
+          if-no-files-found: error
+          compression-level: 0

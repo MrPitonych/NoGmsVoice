@@ -1,0 +1,25 @@
+# The Vosk models: fetch-model.sh downloads them (40-45 MB each) and unpacks them into model/<lang>/assets/model.
+/model/
+
+# Build output and Gradle state
+/build/
+/app/build/
+/app/release/
+/.gradle/
+/local.properties
+*.apk
+*.aab
+
+# The release signing key and its passwords never go into git.
+/keystore.properties
+*.jks
+*.keystore
+
+# Machine-specific files: agent notes (how this computer reaches its TV) and Claude Code's local settings
+/CLAUDE.local.md
+/.claude/settings.local.json
+
+# IDE files
+/.idea/
+*.iml
+.DS_Store

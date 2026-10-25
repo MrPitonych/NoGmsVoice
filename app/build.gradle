@@ -21,8 +21,8 @@ android {
         applicationId = 'io.github.mrpitonych.nogmsvoice'
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = '1.0.0'
+        versionCode = 2
+        versionName = '1.1.0'
         // 32-bit ARM runs on most ARM TVs and boxes, 64-bit ones included (the first target, a Xiaomi S55,
         // is 32-bit only); 64-bit-only Android builds are rare outside phones. The other ABIs would add
         // about 10 MB to the APK.

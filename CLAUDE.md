@@ -50,6 +50,10 @@ well. Without a person's run on a TV, report a behaviour change as built but not
   libraries time out between partials.
 - Every callback goes through `deliver()`, which skips it once the request is cancelled: a late result or
   error would land on the client's next request and make the framework drop it. Keep it that way.
+- The audio source is `VOICE_RECOGNITION` unless the global setting `nogmsvoice_audio_source` names
+  another one (README, "Audio source"); the log says which, and `capture silenced by the system` when
+  Android feeds the capture zeros. Settings.Global was chosen because any app can read a custom key there
+  and `adb shell settings` can write it without an activity.
 
 ## Rules
 

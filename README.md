@@ -113,7 +113,7 @@ The log shows the whole path of a request, including the recognized text:
 
 | Line | Meaning |
 |---|---|
-| `listening for uid N` (`, partial results wanted` when the app asked for them) | an app asked for recognition |
+| `listening for uid N, source S` (`, partial results wanted` when the app asked for them) | an app asked for recognition; S is the audio source, see below |
 | `model unpacked in N ms` | the first load after every install or update: the model files were copied out of the APK |
 | `model loaded in N ms` | every start of the service process (after a reboot, or after Android stopped it for being idle) |
 | `model load failed` | the cause follows; the app gets `ERROR_SERVER` |
@@ -127,6 +127,7 @@ The log shows the whole path of a request, including the recognized text:
 | `utterance cap reached` | 20 s of audio: the phrase is cut off there |
 | `stop requested` | the app ended the phrase itself |
 | `cancelled` | the app cancelled the request (it gets no result) |
+| `capture silenced by the system` | the TV feeds this app silence on that audio source: see "Audio source" below |
 | `result: "..."` | what the app received; empty means `ERROR_NO_MATCH` |
 
 Errors the app sees: `ERROR_AUDIO` (the microphone could not be opened, or stopped delivering: was
@@ -142,6 +143,21 @@ adb shell cmd package query-services --brief -a android.speech.RecognitionServic
 ```
 
 If the setting has changed back by itself, the TV's own assistant has probably reclaimed it; set it again.
+
+**Audio source.** The microphone is opened on Android's `VOICE_RECOGNITION` source, which is where TVs route
+a voice remote. Some firmwares give another app priority on that source and feed everyone else silence:
+the stream flows, the log says `capture silenced by the system`, and results come back empty (seen on a
+Xiaomi S55 with a third-party Bluetooth remote and Google's apps installed). Pick another source with a
+global setting; `mic` is the one to try first:
+
+```
+adb shell settings put global nogmsvoice_audio_source mic
+adb shell settings delete global nogmsvoice_audio_source      # back to voice_recognition
+```
+
+Accepted values: `voice_recognition` (default), `mic`, `default`, `camcorder`, `unprocessed`,
+`voice_communication`. The next request uses the new value; the log line `listening for uid N, source S`
+shows which one is in effect.
 
 ## Uninstall
 

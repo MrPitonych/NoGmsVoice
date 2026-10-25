@@ -1,12 +1,17 @@
 package io.github.mrpitonych.nogmsvoice;
 
+import android.annotation.TargetApi;
 import android.content.Intent;
 import android.media.AudioFormat;
+import android.media.AudioManager;
 import android.media.AudioRecord;
+import android.media.AudioRecordingConfiguration;
 import android.media.MediaRecorder;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.RemoteException;
 import android.os.SystemClock;
+import android.provider.Settings;
 import android.speech.RecognitionService;
 import android.speech.RecognizerIntent;
 import android.speech.SpeechRecognizer;
@@ -19,6 +24,7 @@ import org.vosk.Recognizer;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Offline speech recognition for Android TVs without Google services, built on Vosk.
@@ -33,10 +39,14 @@ import java.util.ArrayList;
  * stream. Audio that arrives while the model is still loading is kept and decoded once it is ready.
  *
  * <p>The language is that of the model built into this flavour (Russian or English), whatever the client
- * asks for: no other model is in the APK.
+ * asks for: no other model is in the APK. The microphone is opened on the VOICE_RECOGNITION source, which
+ * is where TVs route a voice remote; the global setting {@value #AUDIO_SOURCE_SETTING} picks another one
+ * for TVs whose firmware silences that source for third-party apps.
  */
 public class VoskRecognitionService extends RecognitionService {
     static final String TAG = "NoGmsVoice";
+    /** adb shell settings put global nogmsvoice_audio_source mic (voice_recognition when unset). */
+    static final String AUDIO_SOURCE_SETTING = "nogmsvoice_audio_source";
     /** Bounded because endSession() runs on the main thread. A session notices a cancel within a chunk. */
     private static final long SESSION_END_TIMEOUT_MS = 2000;
 
@@ -54,9 +64,31 @@ public class VoskRecognitionService extends RecognitionService {
         ModelHolder.ensureLoading(this);    // no-op once loaded; after a failed load, this is the retry
         boolean wantPartials = intent != null
                 && intent.getBooleanExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false);
-        Log.i(TAG, "listening for uid " + callback.getCallingUid() + (wantPartials ? ", partial results wanted" : ""));
-        session = new Session(callback, wantPartials);
+        String sourceName = audioSourceName();
+        Log.i(TAG, "listening for uid " + callback.getCallingUid() + ", source " + sourceName
+                + (wantPartials ? ", partial results wanted" : ""));
+        session = new Session(callback, wantPartials, audioSource(sourceName));
         session.start();
+    }
+
+    private String audioSourceName() {
+        String name = Settings.Global.getString(getContentResolver(), AUDIO_SOURCE_SETTING);
+        return name == null || name.isEmpty() ? "voice_recognition" : name;
+    }
+
+    /** The MediaRecorder.AudioSource constant named by the setting, in lower case; unknown names fall back. */
+    private static int audioSource(String name) {
+        switch (name) {
+            case "mic": return MediaRecorder.AudioSource.MIC;
+            case "default": return MediaRecorder.AudioSource.DEFAULT;
+            case "camcorder": return MediaRecorder.AudioSource.CAMCORDER;
+            case "unprocessed": return MediaRecorder.AudioSource.UNPROCESSED;
+            case "voice_communication": return MediaRecorder.AudioSource.VOICE_COMMUNICATION;
+            case "voice_recognition": return MediaRecorder.AudioSource.VOICE_RECOGNITION;
+            default:
+                Log.w(TAG, "unknown " + AUDIO_SOURCE_SETTING + " \"" + name + "\", using voice_recognition");
+                return MediaRecorder.AudioSource.VOICE_RECOGNITION;
+        }
     }
 
     @Override
@@ -117,6 +149,7 @@ public class VoskRecognitionService extends RecognitionService {
 
         private final Callback callback;
         private final boolean wantPartials;
+        private final int audioSource;
 
         // Set from the main thread, where RecognitionService delivers its calls; every other field belongs
         // to this thread. Once cancelled is set, no callback may go out: the client would take it as the
@@ -139,10 +172,11 @@ public class VoskRecognitionService extends RecognitionService {
         private long sentPartialAt;
         private boolean beginningSent;
 
-        Session(Callback callback, boolean wantPartials) {
+        Session(Callback callback, boolean wantPartials, int audioSource) {
             super("NoGmsVoice-session");
             this.callback = callback;
             this.wantPartials = wantPartials;
+            this.audioSource = audioSource;
         }
 
         void cancel() {
@@ -158,11 +192,12 @@ public class VoskRecognitionService extends RecognitionService {
             try {
                 Exception loadFailure = ModelHolder.failure();
                 if (loadFailure != null) throw new IOException("model failed to load", loadFailure);
-                record = openRecord();
+                record = openRecord(audioSource);
                 if (record == null) {
                     error(SpeechRecognizer.ERROR_AUDIO);
                     return;
                 }
+                watchForSilencing(record);
                 deliver(() -> callback.readyForSpeech(new Bundle()));
                 short[] buffer = new short[CHUNK_SAMPLES];
                 int fill = 0;
@@ -237,7 +272,7 @@ public class VoskRecognitionService extends RecognitionService {
             }
         }
 
-        private static AudioRecord openRecord() {
+        private static AudioRecord openRecord(int audioSource) {
             int min = AudioRecord.getMinBufferSize(SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO,
                     AudioFormat.ENCODING_PCM_16BIT);
             if (min <= 0) {
@@ -246,7 +281,7 @@ public class VoskRecognitionService extends RecognitionService {
             }
             AudioRecord record;
             try {
-                record = new AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION, SAMPLE_RATE,
+                record = new AudioRecord(audioSource, SAMPLE_RATE,
                         AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT,
                         Math.max(min, RECORD_BUFFER_BYTES));
             } catch (IllegalArgumentException | SecurityException e) {
@@ -265,6 +300,30 @@ public class VoskRecognitionService extends RecognitionService {
                 return null;
             }
             return record;
+        }
+
+        /**
+         * Logs it when the system feeds this capture silence instead of the microphone: Android does that when
+         * an app with a higher capture priority is recording, which some TV firmwares do on the
+         * VOICE_RECOGNITION source. The record then delivers zeros, and the user sees empty results.
+         */
+        @TargetApi(Build.VERSION_CODES.Q)   // the callback's own method is outside the guard below, as lint sees it
+        private static void watchForSilencing(AudioRecord record) {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return;
+            record.registerAudioRecordingCallback(Runnable::run, new AudioManager.AudioRecordingCallback() {
+                private boolean reported;
+
+                @Override
+                public void onRecordingConfigChanged(List<AudioRecordingConfiguration> configs) {
+                    for (AudioRecordingConfiguration config : configs) {
+                        if (config.isClientSilenced() && !reported) {
+                            reported = true;
+                            Log.w(TAG, "capture silenced by the system: another app has priority on this audio source;"
+                                    + " try: settings put global " + AUDIO_SOURCE_SETTING + " mic");
+                        }
+                    }
+                }
+            });
         }
 
         /**

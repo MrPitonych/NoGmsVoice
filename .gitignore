@@ -15,9 +15,11 @@
 *.jks
 *.keystore
 
-# Machine-specific files: agent notes (how this computer reaches its TV) and Claude Code's local settings
+# Machine-specific files: agent notes (how this computer reaches its TV), Claude Code's local settings,
+# and private plans
 /CLAUDE.local.md
 /.claude/settings.local.json
+/notes/
 
 # IDE files
 /.idea/

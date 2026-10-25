@@ -115,7 +115,7 @@ adb shell logcat -d -v time NoGmsVoice:V VoskAPI:W AndroidRuntime:E '*:S'
 
 | Строка | Значение |
 |---|---|
-| `listening for uid N` (с `, partial results wanted`, если приложение просит промежуточный текст) | приложение запросило распознавание |
+| `listening for uid N, source S` (с `, partial results wanted`, если приложение просит промежуточный текст) | приложение запросило распознавание; S - источник звука, см. ниже |
 | `model unpacked in N ms` | первая загрузка после каждой установки или обновления: файлы модели скопированы из APK |
 | `model loaded in N ms` | каждый запуск процесса службы (после перезагрузки или после выгрузки за бездействием) |
 | `model load failed` | дальше причина; приложение получает `ERROR_SERVER` |
@@ -129,6 +129,7 @@ adb shell logcat -d -v time NoGmsVoice:V VoskAPI:W AndroidRuntime:E '*:S'
 | `utterance cap reached` | 20 с звука: фраза обрезана |
 | `stop requested` | приложение само завершило фразу |
 | `cancelled` | приложение отменило запрос (результата не получает) |
+| `capture silenced by the system` | ТВ отдаёт этому приложению тишину вместо звука с этого источника: см. «Источник звука» ниже |
 | `result: "..."` | что получило приложение; пусто значит `ERROR_NO_MATCH` |
 
 Ошибки, которые видит приложение: `ERROR_AUDIO` (микрофон не открылся или перестал отдавать звук:
@@ -146,6 +147,21 @@ adb shell cmd package query-services --brief -a android.speech.RecognitionServic
 
 Если настройка сама вернулась к прежнему значению, её, скорее всего, забрал собственный помощник ТВ;
 задайте её снова.
+
+**Источник звука.** Микрофон открывается через источник Android `VOICE_RECOGNITION`: именно туда ТВ
+направляют звук с голосового пульта. Некоторые прошивки отдают приоритет на этом источнике другому
+приложению, а всем остальным подсовывают тишину: поток идёт, в логе `capture silenced by the system`,
+результаты пустые (замечено на Xiaomi S55 со сторонним Bluetooth-пультом и установленными приложениями
+Google). Источник меняется глобальной настройкой; первым стоит попробовать `mic`:
+
+```
+adb shell settings put global nogmsvoice_audio_source mic
+adb shell settings delete global nogmsvoice_audio_source      # обратно к voice_recognition
+```
+
+Допустимые значения: `voice_recognition` (по умолчанию), `mic`, `default`, `camcorder`, `unprocessed`,
+`voice_communication`. Новое значение действует со следующего запроса; строка лога
+`listening for uid N, source S` показывает, какой источник используется.
 
 ## Удаление
 

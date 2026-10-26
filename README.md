@@ -14,7 +14,7 @@ accounts, no telemetry. The only runtime permission it needs is the microphone.
 It was written for a China-market Xiaomi TV (S55 Mini LED 2024, MiTV-MFTR0, Android 11): its own assistant
 understands only Chinese, and Google's recognizer cannot be installed on it. It is meant for ARM Android
 TVs and boxes on Android 8.0 or newer that have no recognizer of their own. So far it has been tried on
-that one TV; see [Tested on](#tested-on).
+two Xiaomi TVs; see [Tested on](#tested-on).
 
 ## What it does and does not do
 
@@ -33,18 +33,22 @@ that one TV; see [Tested on](#tested-on).
 
 ## Tested on
 
-The `ru` build: Xiaomi TV S55 Mini LED 2024 (MiTV-MFTR0), China firmware V816.0.16.0.RFTMATV, Android 11,
-32-bit ARM, with the stock Bluetooth voice remote and Xiaomi's own assistant (`com.xiaomi.voicecontrol`)
-disabled. Not tried with that assistant enabled. The `en` build is the same code with the English model and
-has not been tried on a device yet.
+- **Xiaomi TV S55 Mini LED 2024** (MiTV-MFTR0), China firmware V816.0.16.0.RFTMATV, Android 11, 32-bit ARM,
+  the stock Bluetooth voice remote: the `ru` build with the default audio source.
+- **Xiaomi L55MA-SPL**, China firmware, Android 11, 32-bit ARM, a MiRC Bluetooth remote: the `ru` build with
+  the `mic` [audio source](#troubleshooting), since the default one gets silence there
+  ([#1](https://github.com/MrPitonych/NoGmsVoice/issues/1)).
 
-On that TV the remote's microphone streams only while the voice key is held, so: select the microphone in
+Xiaomi's own assistant (`com.xiaomi.voicecontrol`) was disabled on both; not tried with it enabled. The `en`
+build is the same code with the English model and has not been tried on a device yet.
+
+On these TVs the remote's microphone streams only while the voice key is held, so: select the microphone in
 the app, hold the key on the remote, say the phrase, release. The service treats the end of the stream as
 the end of the phrase.
 
-Not tested: USB microphones, third-party remotes, Xiaomi's 2025 models with built-in microphones, other
-brands. Whether it works on your TV or not, please open an issue with the TV model, the firmware version
-and the [log](#troubleshooting). Keep IP addresses, Wi-Fi names and serial numbers out of it.
+Not tested: USB microphones, other remotes, Xiaomi's 2025 models with built-in microphones, other brands.
+Whether it works on your TV or not, please open an issue with the TV model, the firmware version and the
+[log](#troubleshooting). Keep IP addresses, Wi-Fi names and serial numbers out of it.
 
 ## Install
 
@@ -72,6 +76,9 @@ Steps:
    adb connect <tv ip>
    adb shell settings get secure voice_recognition_service
    ```
+
+   If it names `com.google.android.katniss`, that app will take the setting back: see "The setting changes
+   back" in [Troubleshooting](#troubleshooting).
 
 3. Install, grant it the microphone, and make it the system's recognizer:
 
@@ -142,13 +149,20 @@ adb shell settings get secure voice_recognition_service
 adb shell cmd package query-services --brief -a android.speech.RecognitionService
 ```
 
-If the setting has changed back by itself, the TV's own assistant has probably reclaimed it; set it again.
+**The setting changes back.** Most likely the TV's assistant has reclaimed it; set it again. Google's
+assistant for TV, `com.google.android.katniss`, keeps taking it while that app is enabled. With the app
+disabled the setting stays, reboots included ([#1](https://github.com/MrPitonych/NoGmsVoice/issues/1)):
+
+```
+adb shell pm disable-user --user 0 com.google.android.katniss
+adb shell settings put secure voice_recognition_service io.github.mrpitonych.nogmsvoice/.VoskRecognitionService
+```
 
 **Audio source.** The microphone is opened on Android's `VOICE_RECOGNITION` source, which is where TVs route
 a voice remote. Some firmwares give another app priority on that source and feed everyone else silence:
-the stream flows, the log says `capture silenced by the system`, and results come back empty (seen on a
-Xiaomi S55 with a third-party Bluetooth remote and Google's apps installed). Pick another source with a
-global setting; `mic` is the one to try first:
+the stream flows, the log says `capture silenced by the system`, and results come back empty (seen on the
+Xiaomi L55MA-SPL in [Tested on](#tested-on), which works with `mic`). Pick another source with a global
+setting; `mic` is the one to try first:
 
 ```
 adb shell settings put global nogmsvoice_audio_source mic
@@ -167,7 +181,8 @@ adb uninstall io.github.mrpitonych.nogmsvoice
 ```
 
 If the setting held a value before the install, put that value back with `settings put` instead of
-deleting it.
+deleting it. If you disabled `com.google.android.katniss`, turn it back on with
+`adb shell pm enable com.google.android.katniss`.
 
 ## Build from source
 

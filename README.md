@@ -8,8 +8,8 @@ NoGmsVoice is an Android speech recognition service (`android.speech.Recognition
 [Vosk](https://alphacephei.com/vosk/), with a small Vosk model packed into the APK. It comes in two builds,
 `ru` with the Russian model and `en` with the US English one. Once it is set as the system's recognizer,
 the microphone button should work in any app that uses the standard `SpeechRecognizer`; confirmed in
-Lampa, Zona and TizenTube Cobalt (a YouTube client). Nothing leaves the TV: no internet permission, no
-accounts, no telemetry. The only runtime permission it needs is the microphone.
+Lampa and Zona. Nothing leaves the TV: no internet permission, no accounts, no telemetry. The only runtime
+permission it needs is the microphone.
 
 It was written for a China-market Xiaomi TV (S55 Mini LED 2024, MiTV-MFTR0, Android 11): its own assistant
 understands only Chinese, and Google's recognizer cannot be installed on it. It is meant for ARM Android
@@ -18,14 +18,16 @@ two Xiaomi TVs; see [Tested on](#tested-on).
 
 ## What it does and does not do
 
-- **Works:** the microphone inside apps that use `SpeechRecognizer`. Confirmed in Lampa, Zona and TizenTube
-  Cobalt. Partial text appears while you speak (in apps that ask for it), and the app's level meter moves.
+- **Works:** the microphone inside apps that use `SpeechRecognizer`. Confirmed in Lampa and Zona. Partial
+  text appears while you speak (in apps that ask for it), and the app's level meter moves.
 - **One language per build.** The `ru` build carries `vosk-model-small-ru-0.22`, the `en` build
   `vosk-model-small-en-us-0.15`. The language an app asks for is ignored: install the build you need.
 - **Not an assistant.** Pressing the remote's voice key alone starts nothing: select the microphone in the
   app first. There is no wake word.
 - **Not supported yet:** apps that launch the `RECOGNIZE_SPEECH` activity instead of binding the service.
   They say "no app found" or do nothing.
+- **Not used by TizenTube Cobalt.** Its voice search does not call the system recognizer: the YouTube page
+  records the microphone itself, and YouTube recognizes the speech on its servers.
 - **Quality** is that of the small Vosk models: fine for short search phrases, weaker on long dictation,
   and names or foreign titles outside the model's vocabulary come out wrong. Word error rates published
   with the models: Russian 11.8% on crowd recordings, 21.3% far-field and 22.7% on audiobooks; English

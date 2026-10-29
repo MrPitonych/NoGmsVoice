@@ -25,8 +25,9 @@ No emulator reproduces the TV's microphone path. After a change in behaviour:
 
 1. Install the APK, grant `RECORD_AUDIO`, set `voice_recognition_service` and send the warmup broadcast,
    as in the README's "Install".
-2. Ask a person to press the microphone in a real app (Lampa, Zona, TizenTube) and speak. An injected key
-   is not a test: on the Xiaomi the remote's voice key is what opens the audio stream.
+2. Ask a person to press the microphone in a real app (Lampa or Zona; TizenTube records the microphone
+   itself and never calls the service) and speak. An injected key is not a test: on the Xiaomi the
+   remote's voice key is what opens the audio stream.
 3. Read `adb shell logcat -d -v time NoGmsVoice:V VoskAPI:W AndroidRuntime:E '*:S'`. A good request shows
    `listening`, `audio started`, one end-of-phrase line (`stream stopped`, `silence after`,
    `utterance cap reached` or `stop requested`) and `result: "..."`.

@@ -6,20 +6,20 @@ Offline speech recognition, Russian or English, for Android TVs that have no Goo
 
 NoGmsVoice is an Android speech recognition service (`android.speech.RecognitionService`) built on
 [Vosk](https://alphacephei.com/vosk/), with a small Vosk model packed into the APK. It comes in two builds,
-`ru` with the Russian model and `en` with the US English one. Once it is set as the system's recognizer,
-the microphone button should work in any app that uses the standard `SpeechRecognizer`; confirmed in
-Lampa and Zona. Nothing leaves the TV: no internet permission, no accounts, no telemetry. The only runtime
+`ru` with the Russian model and `en` with the US English one. Once it is set as the system's recognizer, the
+microphone button should work in any app that uses the standard `SpeechRecognizer`; confirmed in Lampa, Zona
+and Stremio. Nothing leaves the TV: no internet permission, no accounts, no telemetry. The only runtime
 permission it needs is the microphone.
 
 It was written for a China-market Xiaomi TV (S55 Mini LED 2024, MiTV-MFTR0, Android 11): its own assistant
-understands only Chinese, and Google's recognizer cannot be installed on it. It is meant for ARM Android
-TVs and boxes on Android 8.0 or newer that have no recognizer of their own. So far it has been tried on
-two Xiaomi TVs; see [Tested on](#tested-on).
+understands only Chinese, and Google's recognizer cannot be installed on it. It is meant for ARM Android TVs
+and boxes on Android 8.0 or newer that have no recognizer of their own. So far it has been tried on three
+Xiaomi TVs; see [Tested on](#tested-on).
 
 ## What it does and does not do
 
-- **Works:** the microphone inside apps that use `SpeechRecognizer`. Confirmed in Lampa and Zona. Partial
-  text appears while you speak (in apps that ask for it), and the app's level meter moves.
+- **Works:** the microphone inside apps that use `SpeechRecognizer`. Confirmed in Lampa, Zona and Stremio.
+  Partial text appears while you speak (in apps that ask for it), and the app's level meter moves.
 - **One language per build.** The `ru` build carries `vosk-model-small-ru-0.22`, the `en` build
   `vosk-model-small-en-us-0.15`. The language an app asks for is ignored: install the build you need.
 - **Not an assistant.** Pressing the remote's voice key alone starts nothing: select the microphone in the
@@ -28,10 +28,12 @@ two Xiaomi TVs; see [Tested on](#tested-on).
   They say "no app found" or do nothing.
 - **Not used by TizenTube Cobalt.** Its voice search does not call the system recognizer: the YouTube page
   records the microphone itself, and YouTube recognizes the speech on its servers.
-- **Quality** is that of the small Vosk models: fine for short search phrases, weaker on long dictation,
-  and names or foreign titles outside the model's vocabulary come out wrong. Word error rates published
-  with the models: Russian 11.8% on crowd recordings, 21.3% far-field and 22.7% on audiobooks; English
-  9.9% on LibriSpeech test-clean and 10.4% on TED-LIUM. Only the Russian model has been used on a TV.
+- **Quality** is that of the small Vosk models: fine for short search phrases, weaker on long dictation, and
+  names or foreign titles outside the model's vocabulary come out wrong. Word error rates published with the
+  models: Russian 11.8% on crowd recordings, 21.3% far-field and 22.7% on audiobooks; English 9.9% on
+  LibriSpeech test-clean and 10.4% on TED-LIUM. The English model has been tried on one TV so far: single
+  words and short phrases come out fine, with some words mistaken
+  ([#3](https://github.com/MrPitonych/NoGmsVoice/issues/3)).
 
 ## Tested on
 
@@ -40,13 +42,15 @@ two Xiaomi TVs; see [Tested on](#tested-on).
 - **Xiaomi L55MA-SPL**, China firmware, Android 11, 32-bit ARM, a MiRC Bluetooth remote: the `ru` build with
   the `mic` [audio source](#troubleshooting), since the default one gets silence there
   ([#1](https://github.com/MrPitonych/NoGmsVoice/issues/1)).
+- **Xiaomi L65MA-SPL**, HyperOS 2.0.5, the stock Bluetooth voice remote: the `en` build. The default audio
+  source gets silence there too; `mic` records from the TV's own microphone, `voice_communication` from the
+  remote's ([#3](https://github.com/MrPitonych/NoGmsVoice/issues/3)).
 
-Xiaomi's own assistant (`com.xiaomi.voicecontrol`) was disabled on both; not tried with it enabled. The `en`
-build is the same code with the English model and has not been tried on a device yet.
+Xiaomi's own assistant (`com.xiaomi.voicecontrol`) was disabled on all three; not tried with it enabled.
 
-On these TVs the remote's microphone streams only while the voice key is held, so: select the microphone in
-the app, hold the key on the remote, say the phrase, release. The service treats the end of the stream as
-the end of the phrase.
+On the S55 and the L55MA-SPL the remote's microphone streams only while the voice key is held, so: select the
+microphone in the app, hold the key on the remote, say the phrase, release. The service treats the end of the
+stream as the end of the phrase.
 
 Not tested: USB microphones, other remotes, Xiaomi's 2025 models with built-in microphones, other brands.
 Whether it works on your TV or not, please open an issue with the TV model, the firmware version and the
@@ -160,10 +164,10 @@ adb shell pm disable-user --user 0 com.google.android.katniss
 adb shell settings put secure voice_recognition_service io.github.mrpitonych.nogmsvoice/.VoskRecognitionService
 ```
 
-**Audio source.** The microphone is opened on Android's `VOICE_RECOGNITION` source, which is where TVs route
-a voice remote. Some firmwares give another app priority on that source and feed everyone else silence:
-the stream flows, the log says `capture silenced by the system`, and results come back empty (seen on the
-Xiaomi L55MA-SPL in [Tested on](#tested-on), which works with `mic`). Pick another source with a global
+**Audio source.** The microphone is opened on Android's `VOICE_RECOGNITION` source, which is where TVs route a
+voice remote. Some firmwares give another app priority on that source and feed everyone else silence: the
+stream flows, the log says `capture silenced by the system`, and results come back empty (seen on the Xiaomi
+L55MA-SPL and L65MA-SPL in [Tested on](#tested-on), both work with `mic`). Pick another source with a global
 setting; `mic` is the one to try first:
 
 ```
@@ -174,6 +178,12 @@ adb shell settings delete global nogmsvoice_audio_source      # back to voice_re
 Accepted values: `voice_recognition` (default), `mic`, `default`, `camcorder`, `unprocessed`,
 `voice_communication`. The next request uses the new value; the log line `listening for uid N, source S`
 shows which one is in effect.
+
+If the TV lists the remote's microphone as an input of its own, `voice_communication` may record from it. On
+the L65MA-SPL, `adb shell dumpsys audio` shows the remote as a `headset` input next to the TV's `mic`: `mic`
+records from the TV and `voice_communication` from the remote, which sounds cleaner since it is held close
+([#3](https://github.com/MrPitonych/NoGmsVoice/issues/3)). It works only while the remote is connected, and
+there the sound started 1.5 s after the request, so start speaking a moment later.
 
 ## Uninstall
 
